@@ -1,0 +1,73 @@
+﻿#pragma kernel CSMain
+
+#define THREAD_GROUP_SIZE_X 32
+#define THREAD_GROUP_SIZE_Y 32
+#define THREAD_GROUP_SIZE_Z 1
+
+#define CLUSTER_GRID_SIZE 32
+#define MAX_ACTIVE_CLUSTER_NUM 4096
+#define MAX_CLUSTER_Z_NUM 512
+#define THREAD_GROUP_SIZE_XY 1024
+#include "ClusterLib.cginc"
+
+// Buffers
+Texture2D DepthTexture;
+RWStructuredBuffer<uint> ActiveClusterIds;
+groupshared uint ActiveClusterZ[MAX_CLUSTER_Z_NUM];
+
+// Functions
+
+// Kernels
+struct ComputeInput
+{
+    uint3 dispatchThreadID : SV_DispatchThreadID; // DispatchThreadID = dot(GroupID, numthreads) + GroupThreadId;
+    uint3 groupID          : SV_GroupID;          // GroupID = index for each dimension inside a ThreadGroupCount
+    uint3 groupThreadID    : SV_GroupThreadID;    // GroupThreadId = indices for each dimension inside a group of the current thread
+    uint  groupIndex       : SV_GroupIndex;       // GroupIndex = unique index of a thread inside a group
+};
+
+[numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
+void CSMain (ComputeInput ids)
+{
+    uint clusterDimZ = _ClusterDims.z;
+    if (ids.groupIndex < clusterDimZ)
+    {
+        ActiveClusterZ[ids.groupIndex] = 0.0;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+    
+    uint2 sceenSize = _ClusterScreenParams.xy;
+    uint2 texCoord = ids.dispatchThreadID.xy;
+    float rawDepth = 0;
+    if (!any(texCoord.xy <= 0) && !any(texCoord.xy > sceenSize))
+    {
+        rawDepth = DepthTexture.Load(uint3(texCoord, 0)).x;
+    }
+
+    if (rawDepth > 0)
+    {
+        float4 posCS = ScreenToClipPos(texCoord, rawDepth);
+        float4 posVS = ClipToViewPos(posCS);
+        uint3 clusterIndex = ComputeClusterIndex3D(texCoord, -posVS.z);
+
+        ActiveClusterZ[clusterIndex.z] = 1.0;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (ids.groupIndex < clusterDimZ)
+    {
+        if (ActiveClusterZ[ids.groupIndex] > 0.5)
+        {
+            uint3 clusterIndex = ComputeClusterIndex3D(texCoord, 0);
+            clusterIndex.z = ids.groupIndex;
+            uint idx = ActiveClusterIds.IncrementCounter();
+            if (idx < MAX_ACTIVE_CLUSTER_NUM)
+            {
+                uint clusterId = CaculateClusterId(clusterIndex);
+                ActiveClusterIds[idx] = clusterId;
+            }
+        }
+    }
+}
