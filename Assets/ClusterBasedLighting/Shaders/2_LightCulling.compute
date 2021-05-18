@@ -1,0 +1,98 @@
+﻿#pragma kernel CSMain
+#define THREAD_GROUP_SIZE_X 1
+#define THREAD_GROUP_SIZE_Y 1
+#define THREAD_GROUP_SIZE_Z 64
+
+#define MAX_CLUSTER_LIGHT_NUM 32
+#include "ClusterLib.cginc"
+
+// Buffers
+struct PointLight {
+    float4 position; // xyz: world position, w: radius
+    float4 color;
+};
+
+StructuredBuffer<PointLight> GlobalLightList;
+StructuredBuffer<uint> ActiveClusterIds;
+RWStructuredBuffer<uint2> ClusterLightOffsetList;
+RWStructuredBuffer<uint> LightIndexList;
+RWStructuredBuffer<uint> LightIndexListCounter;
+
+groupshared float3 ClusterAabbMin;
+groupshared float3 ClusterAabbMax;
+groupshared uint ClusterLightCount;
+groupshared uint ClusterLightList[MAX_CLUSTER_LIGHT_NUM];
+
+// Functions
+float SqrDistancePointAABB(float3 p, float3 aabbMin, float3 aabbMax)
+{
+    float sqDistance = 0;
+    for (int i = 0; i < 3; i++)
+    {
+        float dMin = max(0, aabbMin[i] - p[i]);
+        sqDistance += dMin * dMin;
+
+        float dMax = max(0, p[i] - aabbMax[i]);
+        sqDistance += dMax * dMax;
+    }
+    return sqDistance;
+}
+
+bool SphereIntersectAABB(float3 position, float radius, float3 aabbMin, float3 aabbMax)
+{
+    float sqrDistance = SqrDistancePointAABB(position, aabbMin, aabbMax);
+    return sqrDistance <= radius * radius;
+}
+
+// Kernels
+struct ComputeInput
+{
+    uint3 dispatchThreadID : SV_DispatchThreadID; // DispatchThreadID = dot(GroupID, numthreads) + GroupThreadId;
+    uint3 groupID          : SV_GroupID;          // GroupID = index for each dimension inside a ThreadGroupCount
+    uint3 groupThreadID    : SV_GroupThreadID;    // GroupThreadId = indices for each dimension inside a group of the current thread
+    uint  groupIndex       : SV_GroupIndex;       // GroupIndex = unique index of a thread inside a group
+};
+
+[numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
+void CSMain (ComputeInput ids)
+{
+    uint clusterId = ids.dispatchThreadID.x;
+
+    if (ids.groupIndex == 0)
+    {
+        float3 aabbMin, aabbMax;
+        CaculateClusterAabb(clusterId, aabbMin, aabbMax);
+        ClusterAabbMin = aabbMin;
+        ClusterAabbMax = aabbMax;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    uint globalLightCount = _GlobalLightCount;
+    for (uint lightIndex = ids.groupIndex; lightIndex < globalLightCount; lightIndex += THREAD_GROUP_SIZE_Z)
+    {
+        PointLight pointLight = GlobalLightList[lightIndex];
+        float3 pointLightViewPos = mul(_ViewMatrix, float4(pointLight.position.xyz, 1)).xyz;
+
+        if (SphereIntersectAABB(pointLightViewPos, pointLight.position.w, ClusterAabbMin, ClusterAabbMax))
+        {
+            uint index = 0;
+            InterlockedAdd(ClusterLightCount, 1, index);
+            if (index < MAX_CLUSTER_LIGHT_NUM)
+            {
+                ClusterLightList[index] = lightIndex;
+            }
+        }
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (ids.groupIndex == 0)
+    {
+        uint clusterLightOffset;
+        InterlockedAdd(LightIndexListCounter[0], ClusterLightCount, clusterLightOffset);
+        ClusterLightOffsetList[clusterId] = uint2(clusterLightOffset, ClusterLightCount);
+    }
+
+    // TODO: setup LightIndexList;
+}

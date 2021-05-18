@@ -1,0 +1,25 @@
+﻿#pragma kernel CSMain
+#define THREAD_GROUP_SIZE_X 64
+#define THREAD_GROUP_SIZE_Y 1
+#define THREAD_GROUP_SIZE_Z 1
+
+// Buffers
+RWStructuredBuffer<uint2> ClusterLightOffsetList;
+
+// Functions
+
+// Kernels
+struct ComputeInput
+{
+    uint3 dispatchThreadID : SV_DispatchThreadID; // DispatchThreadID = dot(GroupID, numthreads) + GroupThreadId;
+    uint3 groupID          : SV_GroupID;          // GroupID = index for each dimension inside a ThreadGroupCount
+    uint3 groupThreadID    : SV_GroupThreadID;    // GroupThreadId = indices for each dimension inside a group of the current thread
+    uint  groupIndex       : SV_GroupIndex;       // GroupIndex = unique index of a thread inside a group
+};
+
+[numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
+void CSMain (ComputeInput ids)
+{
+    ClusterLightOffsetList[ids.dispatchThreadID.x] = 0;
+}
+

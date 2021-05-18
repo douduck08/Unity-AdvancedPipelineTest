@@ -1,13 +1,10 @@
 ﻿#pragma kernel CSMain
-
 #define THREAD_GROUP_SIZE_X 32
 #define THREAD_GROUP_SIZE_Y 32
 #define THREAD_GROUP_SIZE_Z 1
 
-#define CLUSTER_GRID_SIZE 32
 #define MAX_ACTIVE_CLUSTER_NUM 4096
 #define MAX_CLUSTER_Z_NUM 512
-#define THREAD_GROUP_SIZE_XY 1024
 #include "ClusterLib.cginc"
 
 // Buffers
@@ -37,19 +34,14 @@ void CSMain (ComputeInput ids)
 
     GroupMemoryBarrierWithGroupSync();
     
-    uint2 sceenSize = _ClusterScreenParams.xy;
     uint2 texCoord = ids.dispatchThreadID.xy;
-    float rawDepth = 0;
-    if (!any(texCoord.xy <= 0) && !any(texCoord.xy > sceenSize))
-    {
-        rawDepth = DepthTexture.Load(uint3(texCoord, 0)).x;
-    }
+    float rawDepth= DepthTexture.Load(uint3(texCoord, 0)).x;
 
     if (rawDepth > 0)
     {
-        float4 posCS = ScreenToClipPos(texCoord, rawDepth);
-        float4 posVS = ClipToViewPos(posCS);
-        uint3 clusterIndex = ComputeClusterIndex3D(texCoord, -posVS.z);
+        float4 clipPos = ScreenToClipPos(texCoord, rawDepth);
+        float4 viewPos = ClipToViewPos(clipPos);
+        uint3 clusterIndex = ComputeClusterIndex3D(texCoord, -viewPos.z);
 
         ActiveClusterZ[clusterIndex.z] = 1.0;
     }

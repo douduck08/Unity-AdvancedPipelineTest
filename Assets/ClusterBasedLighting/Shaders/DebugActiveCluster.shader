@@ -1,4 +1,4 @@
-﻿Shader "Hidden/ClusterDebugActive"
+﻿Shader "Hidden/DebugActiveCluster"
 {
     Properties
     {
@@ -28,10 +28,8 @@
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
-
             half4 _Color;
             float4 _DisplayScale;
-            float4x4 _InvViewMatrix;
 
             StructuredBuffer<uint> _ActiveClusterIds;
 
@@ -47,7 +45,10 @@
                 float3 size = 0;
 #ifdef PROCEDURAL_INSTANCING_ON
                 uint id = _ActiveClusterIds[unity_InstanceID];
-                CaculateClusterAabb(id, center, size);
+                float3 aabbMin, aabbMax;
+                CaculateClusterAabb(id, aabbMin, aabbMax);
+                center = (aabbMax + aabbMin) * 0.5;
+                size = aabbMax - aabbMin;
 #endif
 
                 float3 positionVS = center + v.vertex.xyz * size * _DisplayScale.xyz;

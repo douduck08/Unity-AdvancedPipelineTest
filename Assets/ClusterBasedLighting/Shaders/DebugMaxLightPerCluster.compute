@@ -1,0 +1,53 @@
+﻿#pragma kernel CSMain
+#define THREAD_GROUP_SIZE_X 1
+#define THREAD_GROUP_SIZE_Y 1
+#define THREAD_GROUP_SIZE_Z 64
+
+#define MAX_CLUSTER_Z_NUM 512
+#include "ClusterLib.cginc"
+
+Texture2D<float4> Source;
+RWTexture2D<float4> Result;
+
+RWStructuredBuffer<uint2> ClusterLightOffsetList;
+groupshared uint MaxLightCount;
+
+// Kernels
+struct ComputeInput
+{
+    uint3 dispatchThreadID : SV_DispatchThreadID; // DispatchThreadID = dot(GroupID, numthreads) + GroupThreadId;
+    uint3 groupID          : SV_GroupID;          // GroupID = index for each dimension inside a ThreadGroupCount
+    uint3 groupThreadID    : SV_GroupThreadID;    // GroupThreadId = indices for each dimension inside a group of the current thread
+    uint  groupIndex       : SV_GroupIndex;       // GroupIndex = unique index of a thread inside a group
+};
+
+[numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
+void CSMain (ComputeInput ids)
+{
+    
+    if (ids.groupIndex == 0)
+    {
+        MaxLightCount = 0;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    uint3 clusterIndex = ComputeClusterIndex3D(ids.dispatchThreadID.xy, 0);
+    uint maxLightCount = 0;
+    for(uint idx_z = ids.dispatchThreadID.z; idx_z < MAX_CLUSTER_Z_NUM; idx_z += THREAD_GROUP_SIZE_Z)
+    {
+        clusterIndex.z = idx_z;
+        uint clusterId = CaculateClusterId(clusterIndex);
+        uint lightCount = ClusterLightOffsetList[clusterId].y;
+        maxLightCount = max(maxLightCount, lightCount);
+    }
+
+    InterlockedMax(MaxLightCount, maxLightCount);
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if (ids.groupIndex == 0)
+    {
+        Result[ids.dispatchThreadID.xy] = lerp(Source[ids.dispatchThreadID.xy], MaxLightCount, 0.5);
+    }
+}

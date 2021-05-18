@@ -1,7 +1,10 @@
 float4 _ClusterDims;
 float4 _ClusterParams; // clusterGridSize, depthSliceRatio, logDepthSliceRatio, zNear
 float4 _ClusterScreenParams; // screenWidth, screenHeight, 1 / screenWidth, 1 / screenHeight
+float4x4 _ViewMatrix;
+float4x4 _InvViewMatrix;
 float4x4 _InvProjectMatrix;
+int _GlobalLightCount;
 
 uint CaculateClusterId(uint3 index)
 {
@@ -40,14 +43,14 @@ float4 ClipToViewPos(float4 clipPos)
     return viewPos;
 }
 
-float2 CaculatePosXYAtDepth(float4 viewPos, float viewDepth)
+float3 CaculateViewPosAtDepth(float4 viewPos, float viewDepth)
 {
     // viewDepth is positive
     // viewPos.z is negtive
-    return viewPos.xy * viewDepth / -viewPos.z;
+    return float3(viewPos.xy * viewDepth / -viewPos.z, -viewDepth);
 }
 
-void CaculateClusterAabb(uint id, out float3 center, out float3 size)
+void CaculateClusterAabb(uint id, out float3 aabbMin, out float3 aabbMax)
 {
     uint3 clusterIndex = CaculateClusterIndex3D(id);
 
@@ -60,13 +63,11 @@ void CaculateClusterAabb(uint id, out float3 center, out float3 size)
     pMin = ClipToViewPos(pMin);
     pMax = ClipToViewPos(pMax);
 
-    float2 nearMin = CaculatePosXYAtDepth(pMin, kNear);
-    float2 farMin = CaculatePosXYAtDepth(pMin, kFar);
-    float2 nearMax = CaculatePosXYAtDepth(pMax, kNear);
-    float2 farMax = CaculatePosXYAtDepth(pMax, kFar);
-    float2 aabbMin = min(nearMin, min(nearMax, min(farMin, farMax)));
-    float2 aabbMax = max(nearMin, max(nearMax, max(farMin, farMax)));
+    float3 nearMin = CaculateViewPosAtDepth(pMin, kNear);
+    float3 farMin = CaculateViewPosAtDepth(pMin, kFar);
+    float3 nearMax = CaculateViewPosAtDepth(pMax, kNear);
+    float3 farMax = CaculateViewPosAtDepth(pMax, kFar);
 
-    center = float3((aabbMax + aabbMin) * 0.5, (kFar + kNear) * -0.5);
-    size = float3(aabbMax - aabbMin, kFar - kNear);
+    aabbMin = min(nearMin, min(nearMax, min(farMin, farMax)));
+    aabbMax = max(nearMin, max(nearMax, max(farMin, farMax)));
 }
