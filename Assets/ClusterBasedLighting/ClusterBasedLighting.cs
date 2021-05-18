@@ -40,6 +40,7 @@ public class ClusterBasedLighting : MonoBehaviour {
     [SerializeField] bool depthSlice = true;
     [SerializeField] bool allBounds = true;
     [SerializeField] bool activeBounds = true;
+    [SerializeField] bool maxLightNumber = true;
     [SerializeField] Vector3 boundsDisplayScale = new Vector3 (1, 1, 1);
     [SerializeField] Shader debugAllShader;
     [SerializeField] Shader debugActiveShader;
@@ -55,10 +56,11 @@ public class ClusterBasedLighting : MonoBehaviour {
         var camera = GetComponent<Camera> ();
         camera.depthTextureMode = DepthTextureMode.Depth;
         InitDispatchResources (camera);
-        UpdateLightData (lights.GetLights ());
+        // UpdateLightData (lights.GetLights ());
     }
 
     void Update () {
+        UpdateLightData (lights.GetLights ());
         SetupDispatchParams ();
         DispatchCompute ();
         DrawDebug ();
@@ -81,6 +83,7 @@ public class ClusterBasedLighting : MonoBehaviour {
 
         activeClusterInitCS.SetBuffer (0, "ActiveClusterIds", activeClusterIds);
         clearClusterOffsetCS.SetBuffer (0, "ClusterLightOffsetList", clusterLightOffsetList);
+        lightCullingCS.SetBuffer (0, "ActiveClusterIds", activeClusterIds);
         lightCullingCS.SetBuffer (0, "GlobalLightList", globalLightList);
         lightCullingCS.SetBuffer (0, "ClusterLightOffsetList", clusterLightOffsetList);
         lightCullingCS.SetBuffer (0, "LightIndexList", lightIndexList);
@@ -164,24 +167,26 @@ public class ClusterBasedLighting : MonoBehaviour {
                     Gizmos.DrawWireCube (depthSlices[i].center, depthSlices[i].size);
                 }
             }
-
-            DrawDebug ();
         }
     }
 
     void OnRenderImage (RenderTexture src, RenderTexture dest) {
-        if (debugRT == null) {
-            debugRT = new RenderTexture (src.descriptor);
-            debugRT.enableRandomWrite = true;
-            debugRT.Create ();
+        if (maxLightNumber) {
+            if (debugRT == null) {
+                debugRT = new RenderTexture (src.descriptor);
+                debugRT.enableRandomWrite = true;
+                debugRT.Create ();
+            }
+
+            var camera = GetComponent<Camera> ();
+            debugMaxLightPerClusterCS.SetTexture (0, "Source", src);
+            debugMaxLightPerClusterCS.SetTexture (0, "Result", debugRT);
+            debugMaxLightPerClusterCS.Dispatch (0, camera.pixelWidth, camera.pixelHeight, 1);
+
+            Graphics.Blit (debugRT, dest);
+        } else {
+            Graphics.Blit (src, dest);
         }
-
-        var camera = GetComponent<Camera> ();
-        debugMaxLightPerClusterCS.SetTexture (0, "Source", src);
-        debugMaxLightPerClusterCS.SetTexture (0, "Result", debugRT);
-        debugMaxLightPerClusterCS.Dispatch (0, camera.pixelWidth, camera.pixelHeight, 1);
-
-        Graphics.Blit (debugRT, dest);
     }
 
     void DrawDebug () {

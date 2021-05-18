@@ -12,8 +12,8 @@ struct PointLight {
     float4 color;
 };
 
-StructuredBuffer<PointLight> GlobalLightList;
 StructuredBuffer<uint> ActiveClusterIds;
+StructuredBuffer<PointLight> GlobalLightList;
 RWStructuredBuffer<uint2> ClusterLightOffsetList;
 RWStructuredBuffer<uint> LightIndexList;
 RWStructuredBuffer<uint> LightIndexListCounter;
@@ -56,7 +56,7 @@ struct ComputeInput
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
 void CSMain (ComputeInput ids)
 {
-    uint clusterId = ids.dispatchThreadID.x;
+    uint clusterId = ActiveClusterIds[ids.dispatchThreadID.x];
 
     if (ids.groupIndex == 0)
     {
@@ -64,6 +64,7 @@ void CSMain (ComputeInput ids)
         CaculateClusterAabb(clusterId, aabbMin, aabbMax);
         ClusterAabbMin = aabbMin;
         ClusterAabbMax = aabbMax;
+        ClusterLightCount = 0;
     }
 
     GroupMemoryBarrierWithGroupSync();
