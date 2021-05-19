@@ -3,7 +3,7 @@
 #define THREAD_GROUP_SIZE_Y 1
 #define THREAD_GROUP_SIZE_Z 64
 
-#define MAX_CLUSTER_LIGHT_NUM 32
+#define MAX_CLUSTER_LIGHT_NUM 64
 #include "ClusterLib.cginc"
 
 // Buffers
@@ -20,6 +20,7 @@ RWStructuredBuffer<uint> LightIndexListCounter;
 
 groupshared float3 ClusterAabbMin;
 groupshared float3 ClusterAabbMax;
+groupshared uint ClusterLightOffset;
 groupshared uint ClusterLightCount;
 groupshared uint ClusterLightList[MAX_CLUSTER_LIGHT_NUM];
 
@@ -58,6 +59,7 @@ void CSMain (ComputeInput ids)
 {
     uint clusterId = ActiveClusterIds[ids.dispatchThreadID.x];
 
+    // caculate cluster aabb for all thread
     if (ids.groupIndex == 0)
     {
         float3 aabbMin, aabbMax;
@@ -69,6 +71,7 @@ void CSMain (ComputeInput ids)
 
     GroupMemoryBarrierWithGroupSync();
 
+    // intersect light bounds with cluster aabb
     uint globalLightCount = _GlobalLightCount;
     for (uint lightIndex = ids.groupIndex; lightIndex < globalLightCount; lightIndex += THREAD_GROUP_SIZE_Z)
     {
@@ -88,12 +91,18 @@ void CSMain (ComputeInput ids)
 
     GroupMemoryBarrierWithGroupSync();
 
+    // update ClusterLightOffsetList
     if (ids.groupIndex == 0)
     {
-        uint clusterLightOffset;
-        InterlockedAdd(LightIndexListCounter[0], ClusterLightCount, clusterLightOffset);
-        ClusterLightOffsetList[clusterId] = uint2(clusterLightOffset, ClusterLightCount);
+        InterlockedAdd(LightIndexListCounter[0], ClusterLightCount, ClusterLightOffset);
+        ClusterLightOffsetList[clusterId] = uint2(ClusterLightOffset, ClusterLightCount);
     }
 
-    // TODO: setup LightIndexList;
+    GroupMemoryBarrierWithGroupSync();
+    
+    // update LightIndexList
+    for (uint index = ids.groupIndex; index < ClusterLightCount; index += THREAD_GROUP_SIZE_Z)
+    {
+        LightIndexList[ClusterLightOffset + index] = ClusterLightList[index];
+    }
 }

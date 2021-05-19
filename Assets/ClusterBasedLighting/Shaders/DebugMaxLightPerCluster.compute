@@ -4,7 +4,7 @@
 #define THREAD_GROUP_SIZE_Z 64
 
 #define MAX_CLUSTER_Z_NUM 512
-#define MAX_CLUSTER_LIGHT_NUM 32
+#define MAX_CLUSTER_LIGHT_NUM 64
 #include "ClusterLib.cginc"
 
 Texture2D<float4> Source;
@@ -15,19 +15,20 @@ groupshared uint MaxLightCount;
 
 // Functions
 float4 GetColor (float intensity) {
-    float3 black = float3(0.0, 0.0, 0.0);
     float3 blue = float3(0.0, 0.0, 1.0);
     float3 cyan = float3(0.0, 1.0, 1.0);
     float3 green = float3(0.0, 1.0, 0.0);
     float3 yellow = float3(1.0, 1.0, 0.0);
     float3 red = float3(1.0, 0.0, 0.0);
+    float3 purple = float3(1.0, 0.0, 1.0);
 
     float3 color = (
     smoothstep(0.0, 0.2, intensity) * smoothstep(0.4, 0.2, intensity) * blue +
     smoothstep(0.2, 0.4, intensity) * smoothstep(0.6, 0.4, intensity) * cyan +
     smoothstep(0.4, 0.6, intensity) * smoothstep(0.8, 0.6, intensity) * green +
-    smoothstep(0.6, 0.8, intensity) * smoothstep(1.0, 0.8, intensity) * yellow +
-    smoothstep(0.8, 1.0, intensity) * red
+    smoothstep(0.6, 0.8, intensity) * smoothstep(0.95, 0.8, intensity) * yellow +
+    smoothstep(0.8, 0.95, intensity) * smoothstep(1.0, 0.95, intensity) * red +
+    smoothstep(0.95, 1.0, intensity) * purple
     );
     return float4(color, 1);
 }

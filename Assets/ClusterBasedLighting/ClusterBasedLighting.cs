@@ -8,9 +8,9 @@ public class ClusterBasedLighting : MonoBehaviour {
 
     const int clusterGridSize = 32;
     const int maxClusterNum = 2048 * 512;
-    const int maxActiveClusterNum = 4096;
-    const int maxLightNum = 1024;
-    const int maxLightNumPerCluster = 32;
+    const int maxActiveClusterNum = 8192;
+    const int maxLightNum = 2048;
+    const int maxLightNumPerCluster = 64;
 
     [SerializeField] ComputeShader activeClusterInitCS;
     [SerializeField] ComputeShader clearClusterOffsetCS;
@@ -35,6 +35,7 @@ public class ClusterBasedLighting : MonoBehaviour {
 
     [Header ("Demo Settings")]
     [SerializeField] RandomLight lights;
+    [SerializeField] List<Material> materials;
 
     [Header ("Debug")]
     [SerializeField] bool depthSlice = true;
@@ -52,11 +53,19 @@ public class ClusterBasedLighting : MonoBehaviour {
     Material debugActiveMaterial;
     RenderTexture debugRT;
 
-    void Start () {
+    void OnEnable () {
         var camera = GetComponent<Camera> ();
         camera.depthTextureMode = DepthTextureMode.Depth;
         InitDispatchResources (camera);
-        // UpdateLightData (lights.GetLights ());
+    }
+
+    void OnDisable () {
+        var camera = GetComponent<Camera> ();
+        ReleaseDispatchResources (camera);
+        if (debugRT != null) {
+            debugRT.Release ();
+            debugRT = null;
+        }
     }
 
     void Update () {
@@ -89,7 +98,44 @@ public class ClusterBasedLighting : MonoBehaviour {
         lightCullingCS.SetBuffer (0, "LightIndexList", lightIndexList);
         lightCullingCS.SetBuffer (0, "LightIndexListCounter", lightIndexListCounter);
 
+        Shader.SetGlobalBuffer ("_GlobalLightList", globalLightList);
+        Shader.SetGlobalBuffer ("_ClusterLightOffsetList", clusterLightOffsetList);
+        Shader.SetGlobalBuffer ("_LightIndexList", lightIndexList);
+
         debugMaxLightPerClusterCS.SetBuffer (0, "ClusterLightOffsetList", clusterLightOffsetList);
+    }
+
+    void ReleaseDispatchResources (Camera camera) {
+        camera.RemoveCommandBuffer (CameraEvent.BeforeForwardOpaque, commandBuffer);
+
+        if (bufferWithArgs != null) {
+            bufferWithArgs.Release ();
+            bufferWithArgs = null;
+        }
+        if (indirectBuffer != null) {
+            indirectBuffer.Release ();
+            indirectBuffer = null;
+        }
+        if (activeClusterIds != null) {
+            activeClusterIds.Release ();
+            activeClusterIds = null;
+        }
+        if (globalLightList != null) {
+            globalLightList.Release ();
+            globalLightList = null;
+        }
+        if (clusterLightOffsetList != null) {
+            clusterLightOffsetList.Release ();
+            clusterLightOffsetList = null;
+        }
+        if (lightIndexList != null) {
+            lightIndexList.Release ();
+            lightIndexList = null;
+        }
+        if (lightIndexListCounter != null) {
+            lightIndexListCounter.Release ();
+            lightIndexListCounter = null;
+        }
     }
 
     void UpdateLightData (List<Light> lights) {
@@ -193,7 +239,7 @@ public class ClusterBasedLighting : MonoBehaviour {
         if (mesh == null) {
             var cube = GameObject.CreatePrimitive (PrimitiveType.Cube);
             mesh = Instantiate (cube.GetComponent<MeshFilter> ().sharedMesh);
-            Destroy (cube);
+            DestroyImmediate (cube);
 
             var indices = new int[] {
                 0, 1, 0, 2, 1, 3, 2, 3,

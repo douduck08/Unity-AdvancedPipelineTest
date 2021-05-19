@@ -15,7 +15,7 @@ uint3 CaculateClusterIndex3D(uint id)
 {
     // instance id = i + (clusterDimX * j) + (clusterDimX * clusterDimY * k)
     uint i = id % _ClusterDims.x;
-    uint j = id % (_ClusterDims.x * _ClusterDims.y) / _ClusterDims.x;
+    uint j = (id / _ClusterDims.x) % _ClusterDims.y;
     uint k = id / (_ClusterDims.x * _ClusterDims.y);
     return uint3(i, j, k);
 }
@@ -47,7 +47,8 @@ float3 CaculateViewPosAtDepth(float4 viewPos, float viewDepth)
 {
     // viewDepth is positive
     // viewPos.z is negtive
-    return float3(viewPos.xy * viewDepth / -viewPos.z, -viewDepth);
+    viewDepth *= -1.0;
+    return float3(viewPos.xy * viewDepth / viewPos.z, viewDepth);
 }
 
 void CaculateClusterAabb(uint id, out float3 aabbMin, out float3 aabbMax)
@@ -58,16 +59,16 @@ void CaculateClusterAabb(uint id, out float3 aabbMin, out float3 aabbMax)
     float kNear = _ClusterParams.w * pow(depthSliceRatio, clusterIndex.z);
     float kFar = kNear * depthSliceRatio;
 
-    float4 pMin = ScreenToClipPos(clusterIndex.xy *_ClusterParams.xx, 0);
-    float4 pMax = ScreenToClipPos((clusterIndex.xy + 1) *_ClusterParams.xx, 0);
-    pMin = ClipToViewPos(pMin);
-    pMax = ClipToViewPos(pMax);
+    float4 pLeftBottom = ScreenToClipPos(clusterIndex.xy * _ClusterParams.xx, 0);
+    float4 pRightTop = ScreenToClipPos((clusterIndex.xy + 1) * _ClusterParams.xx, 0);
+    pLeftBottom = ClipToViewPos(pLeftBottom);
+    pRightTop = ClipToViewPos(pRightTop);
 
-    float3 nearMin = CaculateViewPosAtDepth(pMin, kNear);
-    float3 farMin = CaculateViewPosAtDepth(pMin, kFar);
-    float3 nearMax = CaculateViewPosAtDepth(pMax, kNear);
-    float3 farMax = CaculateViewPosAtDepth(pMax, kFar);
+    float3 nearLB = CaculateViewPosAtDepth(pLeftBottom, kNear);
+    float3 farLB = CaculateViewPosAtDepth(pLeftBottom, kFar);
+    float3 nearRT = CaculateViewPosAtDepth(pRightTop, kNear);
+    float3 farRT = CaculateViewPosAtDepth(pRightTop, kFar);
 
-    aabbMin = min(nearMin, min(nearMax, min(farMin, farMax)));
-    aabbMax = max(nearMin, max(nearMax, max(farMin, farMax)));
+    aabbMin = min(nearLB, min(nearRT, min(farLB, farRT)));
+    aabbMax = max(nearLB, max(nearRT, max(farLB, farRT)));
 }

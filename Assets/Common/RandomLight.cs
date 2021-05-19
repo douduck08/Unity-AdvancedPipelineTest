@@ -41,8 +41,7 @@ public class RandomLight : MonoBehaviour {
         for (int i = 0; i < number; i++) {
             var go = PrefabUtility.InstantiatePrefab (prefab.gameObject) as GameObject;
             go.transform.parent = this.transform;
-            var radius = Random.Range (0.1f, range);
-            go.transform.localPosition = Random.insideUnitSphere * radius;
+            go.transform.localPosition = Random.insideUnitSphere * range;
 
             var light = go.GetComponent<Light> ();
             light.color = new Color (Random.Range (0.5f, 1f), Random.Range (0.5f, 1f), Random.Range (0.5f, 1f));

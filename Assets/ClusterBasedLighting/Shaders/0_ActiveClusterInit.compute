@@ -3,7 +3,7 @@
 #define THREAD_GROUP_SIZE_Y 32
 #define THREAD_GROUP_SIZE_Z 1
 
-#define MAX_ACTIVE_CLUSTER_NUM 4096
+#define MAX_ACTIVE_CLUSTER_NUM 8192
 #define MAX_CLUSTER_Z_NUM 512
 #include "ClusterLib.cginc"
 
@@ -35,14 +35,13 @@ void CSMain (ComputeInput ids)
     GroupMemoryBarrierWithGroupSync();
     
     uint2 texCoord = ids.dispatchThreadID.xy;
-    float rawDepth= DepthTexture.Load(uint3(texCoord, 0)).x;
+    float rawDepth = DepthTexture.Load(uint3(texCoord, 0)).x;
 
     if (rawDepth > 0)
     {
         float4 clipPos = ScreenToClipPos(texCoord, rawDepth);
         float4 viewPos = ClipToViewPos(clipPos);
         uint3 clusterIndex = ComputeClusterIndex3D(texCoord, -viewPos.z);
-
         ActiveClusterZ[clusterIndex.z] = 1.0;
     }
 
